@@ -53,7 +53,7 @@
       width: min(100%, 760px);
       margin: 0 auto;
       padding: max(18px, env(safe-area-inset-top)) 14px
-        max(30px, env(safe-area-inset-bottom));
+        calc(108px + env(safe-area-inset-bottom));
     }
 
     .hero {
@@ -435,6 +435,110 @@
       border-radius: 6px;
     }
 
+
+    .routine-task {
+      background: #ffffff;
+    }
+
+    .routine-task .time {
+      color: #6d28d9;
+      background: #f3e8ff;
+    }
+
+    .routine-task.done {
+      border-color: #ddd6fe;
+    }
+
+    .routine-task.done .task-title {
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+    }
+
+    .location-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: #f4f4f5;
+      color: #52525b;
+      font-size: 10px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .routine-content {
+      width: 100%;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      border-radius: 12px;
+    }
+
+    .routine-content:focus-visible {
+      outline: 3px solid rgba(109, 40, 217, .20);
+      outline-offset: 5px;
+    }
+
+    .bottom-nav-shell {
+      position: fixed;
+      z-index: 30;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding:
+        10px
+        max(12px, env(safe-area-inset-right))
+        calc(10px + env(safe-area-inset-bottom))
+        max(12px, env(safe-area-inset-left));
+      background: linear-gradient(to top, rgba(243,246,244,1) 65%, rgba(243,246,244,.84) 85%, rgba(243,246,244,0));
+      pointer-events: none;
+    }
+
+    .bottom-nav {
+      width: min(calc(100% - 4px), 520px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 6px;
+      border: 1px solid #dce5df;
+      border-radius: 22px;
+      background: rgba(255,255,255,.96);
+      box-shadow: 0 14px 36px rgba(24,39,30,.17);
+      backdrop-filter: blur(14px);
+      pointer-events: auto;
+    }
+
+    .page-btn {
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border-radius: 17px;
+      background: transparent;
+      color: #6b756f;
+      font-weight: 850;
+      transition: background .18s ease, color .18s ease, transform .12s ease;
+    }
+
+    .page-btn:active {
+      transform: scale(.98);
+    }
+
+    .page-btn.active {
+      background: #183f2d;
+      color: white;
+    }
+
+    .page-icon {
+      font-size: 19px;
+      line-height: 1;
+    }
+
     @media (min-width: 640px) {
       .app { padding-left: 22px; padding-right: 22px; }
       .hero { padding: 28px; }
@@ -455,7 +559,7 @@
     <section class="hero">
       <div class="hero-top">
         <div>
-          <p class="eyebrow">Rotina semanal</p>
+          <p class="eyebrow" id="pageEyebrow">Dieta</p>
           <h1 id="dayTitle">Minha rotina</h1>
           <p class="date" id="dateLabel">Carregando planilha…</p>
         </div>
@@ -476,7 +580,7 @@
     <nav class="day-tabs" id="dayTabs" aria-label="Dias da semana"></nav>
 
     <div class="section-head">
-      <h2>Refeições e atividades</h2>
+      <h2 id="sectionTitle">Refeições e atividades</h2>
       <button class="reset-btn" id="resetBtn" type="button">Limpar checks</button>
     </div>
 
@@ -484,18 +588,31 @@
       <div class="loading">Lendo <strong>Dieta.xlsx</strong>…</div>
     </section>
 
-    <p class="source">
+    <p class="source" id="sourceLabel">
       Fonte: <code>Dieta.xlsx</code> → aba <code>Dieta</code>.
-      Atualize o Excel no repositório para atualizar a rotina e as quantidades.
     </p>
   </main>
+
+  <div class="bottom-nav-shell">
+    <nav class="bottom-nav" aria-label="Páginas do app">
+      <button class="page-btn active" id="dietPageBtn" type="button">
+        <span class="page-icon" aria-hidden="true">🍽️</span>
+        <span>Dieta</span>
+      </button>
+      <button class="page-btn" id="routinePageBtn" type="button">
+        <span class="page-icon" aria-hidden="true">✅</span>
+        <span>Rotina</span>
+      </button>
+    </nav>
+  </div>
 
   <script>
     "use strict";
 
-    // Deixe o arquivo Excel com este nome na mesma pasta do index.html.
+    // O Excel deve ficar na mesma pasta do index.html no GitHub Pages.
     const PLANILHA_URL = "./Dieta.xlsx";
     const ABA_DIETA = "Dieta";
+    const ABA_ROTINA = "Rotina";
 
     const DAY_ORDER = [
       "Segunda", "Terça", "Quarta",
@@ -512,13 +629,22 @@
       6: "Sábado"
     };
 
-    let tasks = [];
+    let dietTasks = [];
+    let routineTasks = [];
+    let currentPage = localStorage.getItem("dieta-app-page") === "rotina" ? "rotina" : "dieta";
     let selectedDay = DAY_BY_JS[new Date().getDay()];
 
     const $ = (id) => document.getElementById(id);
 
     function clean(value) {
       return String(value ?? "").trim();
+    }
+
+    function normalizeText(value) {
+      return clean(value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
     }
 
     function parseQuantities(value) {
@@ -537,16 +663,54 @@
     }
 
     function baseDay(dayText) {
-      const normalized = clean(dayText).toLowerCase();
-      return DAY_ORDER.find(day => normalized.startsWith(day.toLowerCase())) || clean(dayText);
+      const normalized = normalizeText(dayText);
+
+      const aliases = {
+        segunda: "Segunda",
+        terca: "Terça",
+        quarta: "Quarta",
+        quinta: "Quinta",
+        sexta: "Sexta",
+        sabado: "Sábado",
+        domingo: "Domingo"
+      };
+
+      const key = Object.keys(aliases).find(k => normalized.startsWith(k));
+      return key ? aliases[key] : clean(dayText);
     }
 
     function isTraining(task) {
-      const text = `${task.meal} ${task.food}`.toLowerCase();
-      return task.food === "—" ||
+      const text = `${task.meal || ""} ${task.food || ""}`.toLowerCase();
+      return task.kind === "dieta" && (
+        task.food === "—" ||
         text.includes("kung fu") ||
         text.includes("academia") ||
-        text.includes("samba rock");
+        text.includes("samba rock")
+      );
+    }
+
+    function formatRoutineTime(value) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        // Horários do Excel são frações de 1 dia.
+        const fraction = ((value % 1) + 1) % 1;
+        let totalMinutes = Math.round(fraction * 24 * 60);
+        totalMinutes %= (24 * 60);
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        return minutes
+          ? `${String(hours).padStart(2, "0")}h${String(minutes).padStart(2, "0")}`
+          : `${String(hours).padStart(2, "0")}h`;
+      }
+
+      const text = clean(value);
+
+      // Caso o XLSX retorne uma fração como texto.
+      const numeric = Number(text.replace(",", "."));
+      if (text && Number.isFinite(numeric) && numeric >= 0 && numeric < 1) {
+        return formatRoutineTime(numeric);
+      }
+
+      return text || "Sem horário";
     }
 
     function hashString(str) {
@@ -559,7 +723,15 @@
     }
 
     function taskId(task) {
-      return hashString([task.day, task.time, task.meal, task.food].join("|"));
+      if (task.kind === "rotina") {
+        return hashString([
+          task.kind, task.day, task.time, task.title, task.location, task.row, task.col
+        ].join("|"));
+      }
+
+      return hashString([
+        task.kind, task.day, task.time, task.meal, task.food
+      ].join("|"));
     }
 
     function mondayOfCurrentWeek() {
@@ -567,7 +739,7 @@
       const day = d.getDay();
       const diff = day === 0 ? -6 : 1 - day;
       d.setDate(d.getDate() + diff);
-      d.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
       const y = d.getFullYear();
       const m = String(d.getMonth() + 1).padStart(2, "0");
       const dd = String(d.getDate()).padStart(2, "0");
@@ -575,7 +747,7 @@
     }
 
     function storageKey(task) {
-      return `dieta-check:${mondayOfCurrentWeek()}:${taskId(task)}`;
+      return `${task.kind}-check:${mondayOfCurrentWeek()}:${taskId(task)}`;
     }
 
     function isDone(task) {
@@ -587,8 +759,12 @@
       else localStorage.removeItem(storageKey(task));
     }
 
+    function activeTasks() {
+      return currentPage === "rotina" ? routineTasks : dietTasks;
+    }
+
     function getTasksForDay(day) {
-      return tasks.filter(t => baseDay(t.day) === day);
+      return activeTasks().filter(t => baseDay(t.day) === day);
     }
 
     function formatToday() {
@@ -597,6 +773,100 @@
         day: "2-digit",
         month: "long"
       }).format(new Date());
+    }
+
+    function readDietSheet(workbook) {
+      const sheet = workbook.Sheets[ABA_DIETA];
+      if (!sheet) throw new Error(`A aba "${ABA_DIETA}" não existe no arquivo Excel.`);
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: false
+      });
+
+      if (!rows.length) throw new Error(`A aba "${ABA_DIETA}" está vazia.`);
+
+      const headers = rows[0].map(clean);
+      const dayCol = headers.findIndex(h => normalizeText(h) === "dia");
+      const timeCol = headers.findIndex(h => normalizeText(h) === "horario");
+      const mealCol = headers.findIndex(h => normalizeText(h) === "refeicao");
+      const foodCol = headers.findIndex(h => normalizeText(h) === "comida simples");
+      const quantityCol = headers.findIndex(h =>
+        ["quantidades", "quantidade", "itens e quantidades"].includes(normalizeText(h))
+      );
+
+      if ([dayCol, timeCol, mealCol, foodCol].some(i => i < 0)) {
+        throw new Error(
+          'Não encontrei as colunas "Dia", "Horário", "Refeição" e "Comida simples" na aba Dieta.'
+        );
+      }
+
+      let currentDay = "";
+
+      dietTasks = rows.slice(1).map((row, index) => {
+        const explicitDay = clean(row[dayCol]);
+        if (explicitDay) currentDay = explicitDay;
+
+        return {
+          kind: "dieta",
+          row: index + 2,
+          day: currentDay,
+          time: clean(row[timeCol]),
+          meal: clean(row[mealCol]),
+          food: clean(row[foodCol]),
+          quantities: quantityCol >= 0 ? parseQuantities(row[quantityCol]) : []
+        };
+      }).filter(t => t.day && (t.time || t.meal || t.food));
+    }
+
+    function readRoutineSheet(workbook) {
+      const sheet = workbook.Sheets[ABA_ROTINA];
+      if (!sheet) throw new Error(`A aba "${ABA_ROTINA}" não existe no arquivo Excel.`);
+
+      // raw:true mantém horários do Excel como frações, permitindo conversão consistente.
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: true
+      });
+
+      if (rows.length < 3) throw new Error(`A aba "${ABA_ROTINA}" não possui dados suficientes.`);
+
+      const locationRow = rows[0] || [];
+      const headerRow = rows[1] || [];
+      routineTasks = [];
+
+      for (let col = 1; col < headerRow.length; col++) {
+        const sourceDay = clean(headerRow[col]);
+        const normalizedDay = baseDay(sourceDay);
+
+        if (!DAY_ORDER.includes(normalizedDay)) continue;
+
+        const location = clean(locationRow[col]);
+
+        for (let rowIndex = 2; rowIndex < rows.length; rowIndex++) {
+          const row = rows[rowIndex] || [];
+          const title = clean(row[col]);
+
+          if (!title) continue;
+
+          routineTasks.push({
+            kind: "rotina",
+            row: rowIndex + 1,
+            col: col + 1,
+            day: normalizedDay,
+            sourceDay,
+            time: formatRoutineTime(row[0]),
+            title,
+            location
+          });
+        }
+      }
+
+      if (!routineTasks.length) {
+        throw new Error('A aba "Rotina" foi encontrada, mas nenhuma tarefa foi identificada.');
+      }
     }
 
     async function loadSpreadsheet() {
@@ -615,58 +885,9 @@
 
       const buffer = await response.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: "array" });
-      const sheet = workbook.Sheets[ABA_DIETA];
 
-      if (!sheet) {
-        throw new Error(`A aba "${ABA_DIETA}" não existe no arquivo Excel.`);
-      }
-
-      const rows = XLSX.utils.sheet_to_json(sheet, {
-        header: 1,
-        defval: "",
-        raw: false
-      });
-
-      if (!rows.length) {
-        throw new Error(`A aba "${ABA_DIETA}" está vazia.`);
-      }
-
-      const headers = rows[0].map(clean);
-      const dayCol = headers.findIndex(h => h.toLowerCase() === "dia");
-      const timeCol = headers.findIndex(h => h.toLowerCase() === "horário" || h.toLowerCase() === "horario");
-      const mealCol = headers.findIndex(h => h.toLowerCase() === "refeição" || h.toLowerCase() === "refeicao");
-      const foodCol = headers.findIndex(h => h.toLowerCase() === "comida simples");
-      const quantityCol = headers.findIndex(h =>
-        h.toLowerCase() === "quantidades" ||
-        h.toLowerCase() === "quantidade" ||
-        h.toLowerCase() === "itens e quantidades"
-      );
-
-      if ([dayCol, timeCol, mealCol, foodCol].some(i => i < 0)) {
-        throw new Error(
-          'Não encontrei as colunas "Dia", "Horário", "Refeição" e "Comida simples" na aba Dieta.'
-        );
-      }
-
-      let currentDay = "";
-
-      tasks = rows.slice(1).map((row, index) => {
-        const explicitDay = clean(row[dayCol]);
-        if (explicitDay) currentDay = explicitDay;
-
-        return {
-          row: index + 2,
-          day: currentDay,
-          time: clean(row[timeCol]),
-          meal: clean(row[mealCol]),
-          food: clean(row[foodCol]),
-          quantities: quantityCol >= 0 ? parseQuantities(row[quantityCol]) : []
-        };
-      }).filter(t => t.day && (t.time || t.meal || t.food));
-
-      if (!tasks.length) {
-        throw new Error("A planilha foi carregada, mas nenhuma rotina foi encontrada.");
-      }
+      readDietSheet(workbook);
+      readRoutineSheet(workbook);
     }
 
     function renderTabs() {
@@ -678,13 +899,196 @@
         btn.type = "button";
         btn.className = "day-tab" + (day === selectedDay ? " active" : "");
         btn.textContent = day;
+
         btn.addEventListener("click", () => {
           selectedDay = day;
           render();
-          btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+          requestAnimationFrame(() => {
+            document.querySelector(".day-tab.active")?.scrollIntoView({
+              behavior: "smooth",
+              block: "nearest",
+              inline: "center"
+            });
+          });
         });
+
         tabs.appendChild(btn);
       });
+    }
+
+    function renderDietTask(task, list) {
+      const training = isTraining(task);
+      const hasDetails = !training && task.quantities.length > 0;
+
+      const card = document.createElement("article");
+      card.className = "task" + (training ? " training" : "");
+      if (isDone(task)) card.classList.add("done");
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "check";
+      check.checked = isDone(task);
+      check.setAttribute("aria-label", `Concluir ${task.meal}`);
+
+      const content = document.createElement(hasDetails ? "button" : "div");
+      content.className = "task-content" + (hasDetails ? " has-details" : "");
+
+      if (hasDetails) {
+        content.type = "button";
+        content.setAttribute("aria-expanded", "false");
+        content.setAttribute("aria-label", `${task.meal}: ver quantidades`);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "task-meta";
+
+      const time = document.createElement("span");
+      time.className = "time";
+      time.textContent = task.time || "Sem horário";
+
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = training ? "ATIVIDADE" : "REFEIÇÃO";
+
+      meta.append(time, tag);
+
+      if (hasDetails) {
+        const chevron = document.createElement("span");
+        chevron.className = "chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        chevron.textContent = "⌄";
+        meta.appendChild(chevron);
+      }
+
+      const title = document.createElement("h3");
+      title.className = "task-title";
+      title.textContent = task.meal || "Tarefa";
+
+      content.append(meta, title);
+
+      if (task.food && task.food !== "—") {
+        const food = document.createElement("p");
+        food.className = "food";
+        food.textContent = task.food;
+        content.appendChild(food);
+      }
+
+      check.addEventListener("change", () => {
+        setDone(task, check.checked);
+        card.classList.toggle("done", check.checked);
+        updateProgress();
+      });
+
+      card.append(check, content);
+
+      if (hasDetails) {
+        const details = document.createElement("div");
+        details.className = "details";
+
+        const panel = document.createElement("div");
+        panel.className = "portion-panel";
+
+        const label = document.createElement("p");
+        label.className = "portion-title";
+        label.textContent = "Quantidade aproximada";
+
+        const portions = document.createElement("ul");
+        portions.className = "portion-list";
+
+        task.quantities.forEach(portion => {
+          const item = document.createElement("li");
+          item.className = "portion-item";
+
+          const name = document.createElement("span");
+          name.className = "portion-name";
+          name.textContent = portion.name;
+          item.appendChild(name);
+
+          if (portion.amount) {
+            const amount = document.createElement("span");
+            amount.className = "portion-amount";
+            amount.textContent = portion.amount;
+            item.appendChild(amount);
+          }
+
+          portions.appendChild(item);
+        });
+
+        panel.append(label, portions);
+        details.appendChild(panel);
+        card.appendChild(details);
+
+        content.addEventListener("click", () => {
+          const expanded = card.classList.toggle("expanded");
+          content.setAttribute("aria-expanded", String(expanded));
+          content.setAttribute(
+            "aria-label",
+            `${task.meal}: ${expanded ? "ocultar" : "ver"} quantidades`
+          );
+        });
+      }
+
+      list.appendChild(card);
+    }
+
+    function renderRoutineTask(task, list) {
+      const card = document.createElement("article");
+      card.className = "task routine-task";
+      if (isDone(task)) card.classList.add("done");
+
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "check";
+      check.checked = isDone(task);
+      check.setAttribute("aria-label", `Concluir ${task.title}`);
+
+      const content = document.createElement("button");
+      content.type = "button";
+      content.className = "routine-content";
+      content.setAttribute("aria-label", `Marcar ${task.title} como ${check.checked ? "pendente" : "concluída"}`);
+
+      const meta = document.createElement("div");
+      meta.className = "task-meta";
+
+      const time = document.createElement("span");
+      time.className = "time";
+      time.textContent = task.time;
+
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = "ROTINA";
+
+      meta.append(time, tag);
+
+      if (task.location) {
+        const location = document.createElement("span");
+        location.className = "location-tag";
+        location.textContent = `⌂ ${task.location}`;
+        meta.appendChild(location);
+      }
+
+      const title = document.createElement("h3");
+      title.className = "task-title";
+      title.textContent = task.title;
+
+      content.append(meta, title);
+
+      function toggleRoutineTask(value) {
+        check.checked = value;
+        setDone(task, value);
+        card.classList.toggle("done", value);
+        content.setAttribute(
+          "aria-label",
+          `Marcar ${task.title} como ${value ? "pendente" : "concluída"}`
+        );
+        updateProgress();
+      }
+
+      check.addEventListener("change", () => toggleRoutineTask(check.checked));
+      content.addEventListener("click", () => toggleRoutineTask(!check.checked));
+
+      card.append(check, content);
+      list.appendChild(card);
     }
 
     function renderTasks() {
@@ -695,125 +1099,16 @@
       if (!dayTasks.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        empty.textContent = "Nenhuma rotina cadastrada para este dia.";
+        empty.textContent = currentPage === "rotina"
+          ? "Nenhuma tarefa de rotina cadastrada para este dia."
+          : "Nenhuma refeição ou atividade cadastrada para este dia.";
         list.appendChild(empty);
         return;
       }
 
       dayTasks.forEach(task => {
-        const training = isTraining(task);
-        const hasDetails = !training && task.quantities.length > 0;
-
-        const card = document.createElement("article");
-        card.className = "task" + (training ? " training" : "");
-        if (isDone(task)) card.classList.add("done");
-
-        const check = document.createElement("input");
-        check.type = "checkbox";
-        check.className = "check";
-        check.checked = isDone(task);
-        check.setAttribute("aria-label", `Concluir ${task.meal}`);
-
-        const content = document.createElement(hasDetails ? "button" : "div");
-        content.className = "task-content" + (hasDetails ? " has-details" : "");
-
-        if (hasDetails) {
-          content.type = "button";
-          content.setAttribute("aria-expanded", "false");
-          content.setAttribute("aria-label", `${task.meal}: ver quantidades`);
-        }
-
-        const meta = document.createElement("div");
-        meta.className = "task-meta";
-
-        const time = document.createElement("span");
-        time.className = "time";
-        time.textContent = task.time || "Sem horário";
-
-        const tag = document.createElement("span");
-        tag.className = "tag";
-        tag.textContent = training ? "ATIVIDADE" : "REFEIÇÃO";
-
-        meta.append(time, tag);
-
-        if (hasDetails) {
-          const chevron = document.createElement("span");
-          chevron.className = "chevron";
-          chevron.setAttribute("aria-hidden", "true");
-          chevron.textContent = "⌄";
-          meta.appendChild(chevron);
-        }
-
-        const title = document.createElement("h3");
-        title.className = "task-title";
-        title.textContent = task.meal || "Tarefa";
-
-        content.append(meta, title);
-
-        if (task.food && task.food !== "—") {
-          const food = document.createElement("p");
-          food.className = "food";
-          food.textContent = task.food;
-          content.appendChild(food);
-        }
-
-        check.addEventListener("change", () => {
-          setDone(task, check.checked);
-          card.classList.toggle("done", check.checked);
-          updateProgress();
-        });
-
-        card.append(check, content);
-
-        if (hasDetails) {
-          const details = document.createElement("div");
-          details.className = "details";
-
-          const panel = document.createElement("div");
-          panel.className = "portion-panel";
-
-          const label = document.createElement("p");
-          label.className = "portion-title";
-          label.textContent = "Quantidade aproximada";
-
-          const portions = document.createElement("ul");
-          portions.className = "portion-list";
-
-          task.quantities.forEach(portion => {
-            const item = document.createElement("li");
-            item.className = "portion-item";
-
-            const name = document.createElement("span");
-            name.className = "portion-name";
-            name.textContent = portion.name;
-
-            item.appendChild(name);
-
-            if (portion.amount) {
-              const amount = document.createElement("span");
-              amount.className = "portion-amount";
-              amount.textContent = portion.amount;
-              item.appendChild(amount);
-            }
-
-            portions.appendChild(item);
-          });
-
-          panel.append(label, portions);
-          details.appendChild(panel);
-          card.appendChild(details);
-
-          content.addEventListener("click", () => {
-            const expanded = card.classList.toggle("expanded");
-            content.setAttribute("aria-expanded", String(expanded));
-            content.setAttribute(
-              "aria-label",
-              `${task.meal}: ${expanded ? "ocultar" : "ver"} quantidades`
-            );
-          });
-        }
-
-        list.appendChild(card);
+        if (currentPage === "rotina") renderRoutineTask(task, list);
+        else renderDietTask(task, list);
       });
     }
 
@@ -827,15 +1122,37 @@
       $("progressBar").style.width = `${percent}%`;
     }
 
+    function updatePageNavigation() {
+      $("dietPageBtn").classList.toggle("active", currentPage === "dieta");
+      $("routinePageBtn").classList.toggle("active", currentPage === "rotina");
+      $("dietPageBtn").setAttribute("aria-current", currentPage === "dieta" ? "page" : "false");
+      $("routinePageBtn").setAttribute("aria-current", currentPage === "rotina" ? "page" : "false");
+    }
+
     function updateHeader() {
       const actualToday = DAY_BY_JS[new Date().getDay()];
-      const fullDayName = tasks.find(t => baseDay(t.day) === selectedDay)?.day || selectedDay;
+      const sourceTask = activeTasks().find(t => baseDay(t.day) === selectedDay);
+      const fullDayName = sourceTask?.sourceDay || sourceTask?.day || selectedDay;
 
       $("dayTitle").textContent = fullDayName;
       $("dateLabel").textContent =
         selectedDay === actualToday
           ? `Hoje · ${formatToday()}`
           : "Planejamento da semana";
+
+      if (currentPage === "rotina") {
+        $("pageEyebrow").textContent = "Rotina";
+        $("sectionTitle").textContent = "Check-ins do dia";
+        $("sourceLabel").innerHTML =
+          'Fonte: <code>Dieta.xlsx</code> → aba <code>Rotina</code>.';
+      } else {
+        $("pageEyebrow").textContent = "Dieta";
+        $("sectionTitle").textContent = "Refeições e atividades";
+        $("sourceLabel").innerHTML =
+          'Fonte: <code>Dieta.xlsx</code> → aba <code>Dieta</code>. Toque na refeição para ver as quantidades.';
+      }
+
+      updatePageNavigation();
     }
 
     function render() {
@@ -849,21 +1166,44 @@
       const dayTasks = getTasksForDay(selectedDay);
       if (!dayTasks.length) return;
 
-      const ok = confirm(`Limpar todos os checks de ${selectedDay}?`);
+      const label = currentPage === "rotina" ? "check-ins da rotina" : "checks da dieta";
+      const ok = confirm(`Limpar todos os ${label} de ${selectedDay}?`);
       if (!ok) return;
 
       dayTasks.forEach(task => localStorage.removeItem(storageKey(task)));
       render();
     }
 
+    function switchPage(page) {
+      currentPage = page;
+      localStorage.setItem("dieta-app-page", page);
+      render();
+
+      requestAnimationFrame(() => {
+        document.querySelector(".day-tab.active")?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center"
+        });
+      });
+    }
+
     $("todayBtn").addEventListener("click", () => {
       selectedDay = DAY_BY_JS[new Date().getDay()];
       render();
-      const active = document.querySelector(".day-tab.active");
-      active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+
+      requestAnimationFrame(() => {
+        document.querySelector(".day-tab.active")?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center"
+        });
+      });
     });
 
     $("resetBtn").addEventListener("click", resetSelectedDay);
+    $("dietPageBtn").addEventListener("click", () => switchPage("dieta"));
+    $("routinePageBtn").addEventListener("click", () => switchPage("rotina"));
 
     (async function init() {
       try {
@@ -871,8 +1211,10 @@
         render();
 
         requestAnimationFrame(() => {
-          const active = document.querySelector(".day-tab.active");
-          active?.scrollIntoView({ block: "nearest", inline: "center" });
+          document.querySelector(".day-tab.active")?.scrollIntoView({
+            block: "nearest",
+            inline: "center"
+          });
         });
       } catch (error) {
         console.error(error);
@@ -882,14 +1224,15 @@
 
         const list = $("taskList");
         list.replaceChildren();
+
         const box = document.createElement("div");
         box.className = "error";
         box.innerHTML =
           `<strong>Erro ao ler a planilha.</strong><br><br>${String(error.message)}<br><br>` +
-          `Importante: abra pelo GitHub Pages/servidor web. O navegador normalmente bloqueia ` +
-          `a leitura do XLSX quando o <code>index.html</code> é aberto diretamente como arquivo local.`;
-        list.appendChild(box);
+          `O arquivo precisa se chamar <code>Dieta.xlsx</code> e ficar na mesma pasta do ` +
+          `<code>index.html</code>. Abra o app pelo GitHub Pages/servidor web.`;
 
+        list.appendChild(box);
         $("progressText").textContent = "0 / 0";
         $("progressBar").style.width = "0%";
       }
