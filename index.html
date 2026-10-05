@@ -290,10 +290,120 @@
       letter-spacing: -.015em;
     }
 
+    .task-content {
+      min-width: 0;
+      width: 100%;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      border-radius: 12px;
+    }
+
+    .task-content.has-details {
+      cursor: pointer;
+    }
+
+    .task-content.has-details:focus-visible {
+      outline: 3px solid rgba(56, 161, 105, .28);
+      outline-offset: 5px;
+    }
+
     .food {
       margin: 6px 0 0;
       color: var(--muted);
       font-size: 14px;
+    }
+
+    .chevron {
+      margin-left: auto;
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 16px;
+      font-weight: 900;
+      line-height: 1;
+      transition: transform .2s ease;
+    }
+
+    .task.expanded .chevron {
+      transform: rotate(180deg);
+    }
+
+    .details {
+      grid-column: 2;
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      margin-top: -4px;
+      transition: max-height .28s ease, opacity .18s ease, margin .28s ease;
+    }
+
+    .task.expanded .details {
+      max-height: 620px;
+      opacity: 1;
+      margin-top: 6px;
+    }
+
+    .portion-panel {
+      padding: 12px;
+      border-radius: 16px;
+      background: #f7faf8;
+      border: 1px solid var(--line);
+    }
+
+    .portion-title {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .portion-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0;
+    }
+
+    .portion-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      min-height: 38px;
+      padding: 8px 2px;
+      border-top: 1px solid #e8eee9;
+      font-size: 14px;
+    }
+
+    .portion-item:first-child {
+      border-top: 0;
+      padding-top: 2px;
+    }
+
+    .portion-name {
+      min-width: 0;
+      color: var(--text);
+      font-weight: 650;
+    }
+
+    .portion-amount {
+      flex: 0 0 auto;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
     }
 
     .empty, .error, .loading {
@@ -376,7 +486,7 @@
 
     <p class="source">
       Fonte: <code>Dieta.xlsx</code> → aba <code>Dieta</code>.
-      Atualize o Excel no repositório para atualizar a rotina.
+      Atualize o Excel no repositório para atualizar a rotina e as quantidades.
     </p>
   </main>
 
@@ -409,6 +519,21 @@
 
     function clean(value) {
       return String(value ?? "").trim();
+    }
+
+    function parseQuantities(value) {
+      return clean(value)
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const separator = line.indexOf("|");
+          if (separator < 0) return { name: line, amount: "" };
+          return {
+            name: line.slice(0, separator).trim(),
+            amount: line.slice(separator + 1).trim()
+          };
+        });
     }
 
     function baseDay(dayText) {
@@ -511,6 +636,11 @@
       const timeCol = headers.findIndex(h => h.toLowerCase() === "horário" || h.toLowerCase() === "horario");
       const mealCol = headers.findIndex(h => h.toLowerCase() === "refeição" || h.toLowerCase() === "refeicao");
       const foodCol = headers.findIndex(h => h.toLowerCase() === "comida simples");
+      const quantityCol = headers.findIndex(h =>
+        h.toLowerCase() === "quantidades" ||
+        h.toLowerCase() === "quantidade" ||
+        h.toLowerCase() === "itens e quantidades"
+      );
 
       if ([dayCol, timeCol, mealCol, foodCol].some(i => i < 0)) {
         throw new Error(
@@ -529,7 +659,8 @@
           day: currentDay,
           time: clean(row[timeCol]),
           meal: clean(row[mealCol]),
-          food: clean(row[foodCol])
+          food: clean(row[foodCol]),
+          quantities: quantityCol >= 0 ? parseQuantities(row[quantityCol]) : []
         };
       }).filter(t => t.day && (t.time || t.meal || t.food));
 
@@ -570,8 +701,11 @@
       }
 
       dayTasks.forEach(task => {
+        const training = isTraining(task);
+        const hasDetails = !training && task.quantities.length > 0;
+
         const card = document.createElement("article");
-        card.className = "task" + (isTraining(task) ? " training" : "");
+        card.className = "task" + (training ? " training" : "");
         if (isDone(task)) card.classList.add("done");
 
         const check = document.createElement("input");
@@ -580,7 +714,14 @@
         check.checked = isDone(task);
         check.setAttribute("aria-label", `Concluir ${task.meal}`);
 
-        const content = document.createElement("div");
+        const content = document.createElement(hasDetails ? "button" : "div");
+        content.className = "task-content" + (hasDetails ? " has-details" : "");
+
+        if (hasDetails) {
+          content.type = "button";
+          content.setAttribute("aria-expanded", "false");
+          content.setAttribute("aria-label", `${task.meal}: ver quantidades`);
+        }
 
         const meta = document.createElement("div");
         meta.className = "task-meta";
@@ -591,9 +732,17 @@
 
         const tag = document.createElement("span");
         tag.className = "tag";
-        tag.textContent = isTraining(task) ? "ATIVIDADE" : "REFEIÇÃO";
+        tag.textContent = training ? "ATIVIDADE" : "REFEIÇÃO";
 
         meta.append(time, tag);
+
+        if (hasDetails) {
+          const chevron = document.createElement("span");
+          chevron.className = "chevron";
+          chevron.setAttribute("aria-hidden", "true");
+          chevron.textContent = "⌄";
+          meta.appendChild(chevron);
+        }
 
         const title = document.createElement("h3");
         title.className = "task-title";
@@ -614,14 +763,56 @@
           updateProgress();
         });
 
-        // Tocar no card também alterna o check, sem conflitar com o checkbox.
-        card.addEventListener("click", (event) => {
-          if (event.target === check) return;
-          check.checked = !check.checked;
-          check.dispatchEvent(new Event("change"));
-        });
-
         card.append(check, content);
+
+        if (hasDetails) {
+          const details = document.createElement("div");
+          details.className = "details";
+
+          const panel = document.createElement("div");
+          panel.className = "portion-panel";
+
+          const label = document.createElement("p");
+          label.className = "portion-title";
+          label.textContent = "Quantidade aproximada";
+
+          const portions = document.createElement("ul");
+          portions.className = "portion-list";
+
+          task.quantities.forEach(portion => {
+            const item = document.createElement("li");
+            item.className = "portion-item";
+
+            const name = document.createElement("span");
+            name.className = "portion-name";
+            name.textContent = portion.name;
+
+            item.appendChild(name);
+
+            if (portion.amount) {
+              const amount = document.createElement("span");
+              amount.className = "portion-amount";
+              amount.textContent = portion.amount;
+              item.appendChild(amount);
+            }
+
+            portions.appendChild(item);
+          });
+
+          panel.append(label, portions);
+          details.appendChild(panel);
+          card.appendChild(details);
+
+          content.addEventListener("click", () => {
+            const expanded = card.classList.toggle("expanded");
+            content.setAttribute("aria-expanded", String(expanded));
+            content.setAttribute(
+              "aria-label",
+              `${task.meal}: ${expanded ? "ocultar" : "ver"} quantidades`
+            );
+          });
+        }
+
         list.appendChild(card);
       });
     }

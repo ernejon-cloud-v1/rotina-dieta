@@ -1,23 +1,36 @@
-# Controle de Dieta e Treinos
+# Controle de Dieta e Treinos — v2
 
 Arquivos:
-- `index.html`: aplicativo mobile.
-- `Dieta.xlsx`: fonte dos dados.
+- `index.html`: aplicativo mobile com cards expansíveis.
+- `Dieta.xlsx`: fonte dos dados, incluindo a coluna `Quantidades`.
+
+## O que mudou
+- Toque em uma refeição para abrir a lista de alimentos e quantidades.
+- Toque novamente para fechar.
+- O checkbox continua exclusivo para marcar a tarefa como concluída.
+- As quantidades vêm da coluna `Quantidades` da aba `Dieta`.
+- Treinos não abrem lista de alimentos.
 
 ## Publicar no GitHub Pages
-1. Envie `index.html` e `Dieta.xlsx` para a raiz do mesmo repositório.
-2. No GitHub, abra **Settings > Pages**.
-3. Em **Build and deployment**, selecione **Deploy from a branch**.
-4. Escolha a branch (normalmente `main`) e a pasta `/ (root)`.
-5. Abra a URL gerada pelo GitHub Pages no Android.
+Substitua no repositório os arquivos antigos `index.html` e `Dieta.xlsx` por estes novos arquivos.
 
-## Atualizar a rotina
-Edite `Dieta.xlsx`, mantendo a aba `Dieta` e as colunas:
-`Dia`, `Horário`, `Refeição`, `Comida simples`.
+A estrutura deve ficar assim:
 
-Depois faça commit/push do novo `Dieta.xlsx`.
-O HTML lê o arquivo a cada abertura/recarregamento.
+```
+/
+├── index.html
+└── Dieta.xlsx
+```
 
-## Observação
-Os checks ficam salvos no `localStorage` do navegador e são separados por semana.
-Ao começar uma nova semana, os novos checks começam vazios.
+O HTML carrega `./Dieta.xlsx`, então os dois arquivos precisam estar na mesma pasta.
+
+## Editar as quantidades
+Na aba `Dieta`, a coluna `Quantidades` usa uma linha por alimento no formato:
+
+```
+Pão|2 fatias
+Queijo|30 g
+Leite|250 ml
+```
+
+Ao atualizar a planilha e fazer push para o GitHub, as novas quantidades aparecem no app.
