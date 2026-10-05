@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="color-scheme" content="light" />
+  <title>Minha Rotina — Dieta & Treinos</title>
+
+  <!-- Lê o arquivo XLSX diretamente do repositório -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f3f6f4;
+      --card: #ffffff;
+      --text: #17201b;
+      --muted: #66736c;
+      --line: #dde5e0;
+      --primary: #276749;
+      --primary-2: #38a169;
+      --primary-soft: #e8f5ed;
+      --training: #eef2ff;
+      --training-text: #3730a3;
+      --danger-soft: #fff1f2;
+      --danger: #be123c;
+      --shadow: 0 8px 24px rgba(24, 39, 30, .08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-tap-highlight-color: transparent; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.4;
+    }
+
+    button, input { font: inherit; }
+
+    button {
+      border: 0;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .app {
+      width: min(100%, 760px);
+      margin: 0 auto;
+      padding: max(18px, env(safe-area-inset-top)) 14px
+        max(30px, env(safe-area-inset-bottom));
+    }
+
+    .hero {
+      padding: 22px;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at top right, rgba(255,255,255,.20), transparent 34%),
+        linear-gradient(135deg, #183f2d, #2f855a);
+      color: white;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .eyebrow {
+      margin: 0 0 6px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .11em;
+      text-transform: uppercase;
+      opacity: .72;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(25px, 7vw, 34px);
+      letter-spacing: -.04em;
+      line-height: 1.05;
+    }
+
+    .date {
+      margin: 9px 0 0;
+      opacity: .83;
+      font-size: 14px;
+    }
+
+    .today-btn {
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.16);
+      color: white;
+      font-weight: 800;
+      backdrop-filter: blur(6px);
+    }
+
+    .progress-wrap { margin-top: 22px; }
+
+    .progress-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 9px;
+      font-size: 13px;
+    }
+
+    .progress-head strong { font-size: 15px; }
+
+    .progress {
+      height: 11px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.18);
+      overflow: hidden;
+    }
+
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: #fff;
+      transition: width .25s ease;
+    }
+
+    .day-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 16px 2px 6px;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+    }
+
+    .day-tabs::-webkit-scrollbar { display: none; }
+
+    .day-tab {
+      flex: 0 0 auto;
+      padding: 11px 15px;
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(24,39,30,.03);
+      scroll-snap-align: start;
+    }
+
+    .day-tab.active {
+      color: white;
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      margin: 17px 4px 10px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -.02em;
+    }
+
+    .reset-btn {
+      padding: 9px 12px;
+      border-radius: 12px;
+      background: var(--danger-soft);
+      color: var(--danger);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .task-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .task {
+      display: grid;
+      grid-template-columns: 46px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 5px 16px rgba(24,39,30,.045);
+      transition: transform .15s ease, opacity .2s ease, border-color .2s ease;
+    }
+
+    .task:active { transform: scale(.992); }
+
+    .task.training {
+      background: var(--training);
+      border-color: #dfe3ff;
+    }
+
+    .check {
+      position: relative;
+      width: 46px;
+      height: 46px;
+      margin: 0;
+      border-radius: 15px;
+      border: 2px solid #cbd6cf;
+      appearance: none;
+      -webkit-appearance: none;
+      background: #fff;
+      cursor: pointer;
+      display: grid;
+      place-content: center;
+      transition: .2s ease;
+    }
+
+    .check::after {
+      content: "";
+      width: 11px;
+      height: 20px;
+      border: solid white;
+      border-width: 0 4px 4px 0;
+      transform: rotate(45deg) scale(0);
+      margin-top: -3px;
+      transition: transform .16s ease;
+    }
+
+    .check:checked {
+      background: var(--primary-2);
+      border-color: var(--primary-2);
+    }
+
+    .check:checked::after { transform: rotate(45deg) scale(1); }
+
+    .task.done {
+      opacity: .58;
+      border-color: #c6d8cc;
+    }
+
+    .task.done .task-title,
+    .task.done .food {
+      text-decoration: line-through;
+      text-decoration-thickness: 1.5px;
+    }
+
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 5px;
+    }
+
+    .time {
+      font-size: 12px;
+      font-weight: 900;
+      color: var(--primary);
+      background: var(--primary-soft);
+      padding: 5px 8px;
+      border-radius: 999px;
+    }
+
+    .training .time {
+      color: var(--training-text);
+      background: rgba(255,255,255,.72);
+    }
+
+    .tag {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .task-title {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: -.015em;
+    }
+
+    .food {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .empty, .error, .loading {
+      padding: 24px 18px;
+      border-radius: var(--radius);
+      background: var(--card);
+      border: 1px solid var(--line);
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .error {
+      color: #9f1239;
+      background: #fff1f2;
+      border-color: #fecdd3;
+      text-align: left;
+    }
+
+    .source {
+      margin: 18px 4px 0;
+      color: #7a8780;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .source code {
+      background: #e8edea;
+      padding: 2px 5px;
+      border-radius: 6px;
+    }
+
+    @media (min-width: 640px) {
+      .app { padding-left: 22px; padding-right: 22px; }
+      .hero { padding: 28px; }
+      .task { padding: 18px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="hero-top">
+        <div>
+          <p class="eyebrow">Rotina semanal</p>
+          <h1 id="dayTitle">Minha rotina</h1>
+          <p class="date" id="dateLabel">Carregando planilha…</p>
+        </div>
+        <button class="today-btn" id="todayBtn" type="button">Hoje</button>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-head">
+          <span>Progresso do dia</span>
+          <strong id="progressText">0 / 0</strong>
+        </div>
+        <div class="progress" aria-label="Progresso do dia">
+          <span id="progressBar"></span>
+        </div>
+      </div>
+    </section>
+
+    <nav class="day-tabs" id="dayTabs" aria-label="Dias da semana"></nav>
+
+    <div class="section-head">
+      <h2>Refeições e atividades</h2>
+      <button class="reset-btn" id="resetBtn" type="button">Limpar checks</button>
+    </div>
+
+    <section class="task-list" id="taskList">
+      <div class="loading">Lendo <strong>Dieta.xlsx</strong>…</div>
+    </section>
+
+    <p class="source">
+      Fonte: <code>Dieta.xlsx</code> → aba <code>Dieta</code>.
+      Atualize o Excel no repositório para atualizar a rotina.
+    </p>
+  </main>
+
+  <script>
+    "use strict";
+
+    // Deixe o arquivo Excel com este nome na mesma pasta do index.html.
+    const PLANILHA_URL = "./Dieta.xlsx";
+    const ABA_DIETA = "Dieta";
+
+    const DAY_ORDER = [
+      "Segunda", "Terça", "Quarta",
+      "Quinta", "Sexta", "Sábado", "Domingo"
+    ];
+
+    const DAY_BY_JS = {
+      0: "Domingo",
+      1: "Segunda",
+      2: "Terça",
+      3: "Quarta",
+      4: "Quinta",
+      5: "Sexta",
+      6: "Sábado"
+    };
+
+    let tasks = [];
+    let selectedDay = DAY_BY_JS[new Date().getDay()];
+
+    const $ = (id) => document.getElementById(id);
+
+    function clean(value) {
+      return String(value ?? "").trim();
+    }
+
+    function baseDay(dayText) {
+      const normalized = clean(dayText).toLowerCase();
+      return DAY_ORDER.find(day => normalized.startsWith(day.toLowerCase())) || clean(dayText);
+    }
+
+    function isTraining(task) {
+      const text = `${task.meal} ${task.food}`.toLowerCase();
+      return task.food === "—" ||
+        text.includes("kung fu") ||
+        text.includes("academia") ||
+        text.includes("samba rock");
+    }
+
+    function hashString(str) {
+      let hash = 2166136261;
+      for (let i = 0; i < str.length; i++) {
+        hash ^= str.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(36);
+    }
+
+    function taskId(task) {
+      return hashString([task.day, task.time, task.meal, task.food].join("|"));
+    }
+
+    function mondayOfCurrentWeek() {
+      const d = new Date();
+      const day = d.getDay();
+      const diff = day === 0 ? -6 : 1 - day;
+      d.setDate(d.getDate() + diff);
+      d.setHours(0,0,0,0);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${dd}`;
+    }
+
+    function storageKey(task) {
+      return `dieta-check:${mondayOfCurrentWeek()}:${taskId(task)}`;
+    }
+
+    function isDone(task) {
+      return localStorage.getItem(storageKey(task)) === "1";
+    }
+
+    function setDone(task, value) {
+      if (value) localStorage.setItem(storageKey(task), "1");
+      else localStorage.removeItem(storageKey(task));
+    }
+
+    function getTasksForDay(day) {
+      return tasks.filter(t => baseDay(t.day) === day);
+    }
+
+    function formatToday() {
+      return new Intl.DateTimeFormat("pt-BR", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long"
+      }).format(new Date());
+    }
+
+    async function loadSpreadsheet() {
+      if (!window.XLSX) {
+        throw new Error("Não foi possível carregar o leitor de Excel. Verifique sua conexão com a internet.");
+      }
+
+      const response = await fetch(encodeURI(PLANILHA_URL), { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error(
+          `Arquivo ${PLANILHA_URL.replace("./", "")} não encontrado. ` +
+          "Coloque o Excel na mesma pasta do index.html no GitHub."
+        );
+      }
+
+      const buffer = await response.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[ABA_DIETA];
+
+      if (!sheet) {
+        throw new Error(`A aba "${ABA_DIETA}" não existe no arquivo Excel.`);
+      }
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: false
+      });
+
+      if (!rows.length) {
+        throw new Error(`A aba "${ABA_DIETA}" está vazia.`);
+      }
+
+      const headers = rows[0].map(clean);
+      const dayCol = headers.findIndex(h => h.toLowerCase() === "dia");
+      const timeCol = headers.findIndex(h => h.toLowerCase() === "horário" || h.toLowerCase() === "horario");
+      const mealCol = headers.findIndex(h => h.toLowerCase() === "refeição" || h.toLowerCase() === "refeicao");
+      const foodCol = headers.findIndex(h => h.toLowerCase() === "comida simples");
+
+      if ([dayCol, timeCol, mealCol, foodCol].some(i => i < 0)) {
+        throw new Error(
+          'Não encontrei as colunas "Dia", "Horário", "Refeição" e "Comida simples" na aba Dieta.'
+        );
+      }
+
+      let currentDay = "";
+
+      tasks = rows.slice(1).map((row, index) => {
+        const explicitDay = clean(row[dayCol]);
+        if (explicitDay) currentDay = explicitDay;
+
+        return {
+          row: index + 2,
+          day: currentDay,
+          time: clean(row[timeCol]),
+          meal: clean(row[mealCol]),
+          food: clean(row[foodCol])
+        };
+      }).filter(t => t.day && (t.time || t.meal || t.food));
+
+      if (!tasks.length) {
+        throw new Error("A planilha foi carregada, mas nenhuma rotina foi encontrada.");
+      }
+    }
+
+    function renderTabs() {
+      const tabs = $("dayTabs");
+      tabs.replaceChildren();
+
+      DAY_ORDER.forEach(day => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "day-tab" + (day === selectedDay ? " active" : "");
+        btn.textContent = day;
+        btn.addEventListener("click", () => {
+          selectedDay = day;
+          render();
+          btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        });
+        tabs.appendChild(btn);
+      });
+    }
+
+    function renderTasks() {
+      const list = $("taskList");
+      const dayTasks = getTasksForDay(selectedDay);
+      list.replaceChildren();
+
+      if (!dayTasks.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Nenhuma rotina cadastrada para este dia.";
+        list.appendChild(empty);
+        return;
+      }
+
+      dayTasks.forEach(task => {
+        const card = document.createElement("article");
+        card.className = "task" + (isTraining(task) ? " training" : "");
+        if (isDone(task)) card.classList.add("done");
+
+        const check = document.createElement("input");
+        check.type = "checkbox";
+        check.className = "check";
+        check.checked = isDone(task);
+        check.setAttribute("aria-label", `Concluir ${task.meal}`);
+
+        const content = document.createElement("div");
+
+        const meta = document.createElement("div");
+        meta.className = "task-meta";
+
+        const time = document.createElement("span");
+        time.className = "time";
+        time.textContent = task.time || "Sem horário";
+
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = isTraining(task) ? "ATIVIDADE" : "REFEIÇÃO";
+
+        meta.append(time, tag);
+
+        const title = document.createElement("h3");
+        title.className = "task-title";
+        title.textContent = task.meal || "Tarefa";
+
+        content.append(meta, title);
+
+        if (task.food && task.food !== "—") {
+          const food = document.createElement("p");
+          food.className = "food";
+          food.textContent = task.food;
+          content.appendChild(food);
+        }
+
+        check.addEventListener("change", () => {
+          setDone(task, check.checked);
+          card.classList.toggle("done", check.checked);
+          updateProgress();
+        });
+
+        // Tocar no card também alterna o check, sem conflitar com o checkbox.
+        card.addEventListener("click", (event) => {
+          if (event.target === check) return;
+          check.checked = !check.checked;
+          check.dispatchEvent(new Event("change"));
+        });
+
+        card.append(check, content);
+        list.appendChild(card);
+      });
+    }
+
+    function updateProgress() {
+      const dayTasks = getTasksForDay(selectedDay);
+      const done = dayTasks.filter(isDone).length;
+      const total = dayTasks.length;
+      const percent = total ? Math.round((done / total) * 100) : 0;
+
+      $("progressText").textContent = `${done} / ${total} · ${percent}%`;
+      $("progressBar").style.width = `${percent}%`;
+    }
+
+    function updateHeader() {
+      const actualToday = DAY_BY_JS[new Date().getDay()];
+      const fullDayName = tasks.find(t => baseDay(t.day) === selectedDay)?.day || selectedDay;
+
+      $("dayTitle").textContent = fullDayName;
+      $("dateLabel").textContent =
+        selectedDay === actualToday
+          ? `Hoje · ${formatToday()}`
+          : "Planejamento da semana";
+    }
+
+    function render() {
+      renderTabs();
+      updateHeader();
+      renderTasks();
+      updateProgress();
+    }
+
+    function resetSelectedDay() {
+      const dayTasks = getTasksForDay(selectedDay);
+      if (!dayTasks.length) return;
+
+      const ok = confirm(`Limpar todos os checks de ${selectedDay}?`);
+      if (!ok) return;
+
+      dayTasks.forEach(task => localStorage.removeItem(storageKey(task)));
+      render();
+    }
+
+    $("todayBtn").addEventListener("click", () => {
+      selectedDay = DAY_BY_JS[new Date().getDay()];
+      render();
+      const active = document.querySelector(".day-tab.active");
+      active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    });
+
+    $("resetBtn").addEventListener("click", resetSelectedDay);
+
+    (async function init() {
+      try {
+        await loadSpreadsheet();
+        render();
+
+        requestAnimationFrame(() => {
+          const active = document.querySelector(".day-tab.active");
+          active?.scrollIntoView({ block: "nearest", inline: "center" });
+        });
+      } catch (error) {
+        console.error(error);
+        $("dayTitle").textContent = "Não foi possível carregar";
+        $("dateLabel").textContent = "Confira o arquivo do repositório";
+        $("dayTabs").replaceChildren();
+
+        const list = $("taskList");
+        list.replaceChildren();
+        const box = document.createElement("div");
+        box.className = "error";
+        box.innerHTML =
+          `<strong>Erro ao ler a planilha.</strong><br><br>${String(error.message)}<br><br>` +
+          `Importante: abra pelo GitHub Pages/servidor web. O navegador normalmente bloqueia ` +
+          `a leitura do XLSX quando o <code>index.html</code> é aberto diretamente como arquivo local.`;
+        list.appendChild(box);
+
+        $("progressText").textContent = "0 / 0";
+        $("progressBar").style.width = "0%";
+      }
+    })();
+  </script>
+</body>
+</html>
