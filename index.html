@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#111827" />
   <meta name="color-scheme" content="light" />
   <title>Minha Rotina — Dieta & Treinos</title>
+  <!-- App v4: compatível com Dieta E:I e Rotina Até/Após 23/10 -->
 
   <!-- Lê o arquivo XLSX diretamente do repositório -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -612,7 +613,13 @@
     // O Excel deve ficar na mesma pasta do index.html no GitHub Pages.
     const PLANILHA_URL = "./Dieta.xlsx";
     const ABA_DIETA = "Dieta";
+    const ABA_DIETA_TEMP = "Dieta até 23-10";
     const ABA_ROTINA = "Rotina";
+
+    // Data de corte da rotina mostrada na planilha.
+    // Até o fim de 23/10/2026 o app usa o bloco "Até 23/10".
+    // A partir de 24/10/2026 usa automaticamente "Após 23/10".
+    const ROTINA_CUTOFF = new Date(2026, 9, 23, 23, 59, 59);
 
     const DAY_ORDER = [
       "Segunda", "Terça", "Quarta",
@@ -631,6 +638,8 @@
 
     let dietTasks = [];
     let routineTasks = [];
+    let routinePeriod = "";
+    let dietSourceSheet = ABA_DIETA;
     let currentPage = localStorage.getItem("dieta-app-page") === "rotina" ? "rotina" : "dieta";
     let selectedDay = DAY_BY_JS[new Date().getDay()];
 
@@ -725,12 +734,13 @@
     function taskId(task) {
       if (task.kind === "rotina") {
         return hashString([
-          task.kind, task.day, task.time, task.title, task.location, task.row, task.col
+          task.kind, task.period || "", task.day, task.time,
+          task.title, task.location, task.row, task.col
         ].join("|"));
       }
 
       return hashString([
-        task.kind, task.day, task.time, task.meal, task.food
+        task.kind, task.period || "", task.day, task.time, task.meal, task.food
       ].join("|"));
     }
 
@@ -775,9 +785,58 @@
       }).format(new Date());
     }
 
+    function isBeforeOrOnCutoff() {
+      return new Date() <= ROTINA_CUTOFF;
+    }
+
+    function currentPeriodLabel() {
+      return isBeforeOrOnCutoff() ? "Até 23/10" : "Após 23/10";
+    }
+
+    function findDietTable(rows) {
+      // Procura especificamente a sequência:
+      // Dia | Horário | Refeição | Comida simples | Quantidades
+      // Isso evita confundir a tabela antiga A:C com a tabela do app E:I.
+      for (let rowIndex = 0; rowIndex < Math.min(rows.length, 12); rowIndex++) {
+        const row = rows[rowIndex] || [];
+
+        for (let col = 0; col < row.length; col++) {
+          if (
+            normalizeText(row[col]) === "dia" &&
+            normalizeText(row[col + 1]) === "horario" &&
+            normalizeText(row[col + 2]) === "refeicao" &&
+            normalizeText(row[col + 3]) === "comida simples"
+          ) {
+            return {
+              headerRow: rowIndex,
+              dayCol: col,
+              timeCol: col + 1,
+              mealCol: col + 2,
+              foodCol: col + 3,
+              quantityCol:
+                ["quantidades", "quantidade", "itens e quantidades"].includes(
+                  normalizeText(row[col + 4])
+                )
+                  ? col + 4
+                  : -1
+            };
+          }
+        }
+      }
+
+      return null;
+    }
+
     function readDietSheet(workbook) {
-      const sheet = workbook.Sheets[ABA_DIETA];
-      if (!sheet) throw new Error(`A aba "${ABA_DIETA}" não existe no arquivo Excel.`);
+      // Se a planilha temporária existir, usa-a automaticamente até 23/10.
+      // Depois usa a aba Dieta, cuja tabela do app está em E:I.
+      const useTemporaryDiet = isBeforeOrOnCutoff() && workbook.Sheets[ABA_DIETA_TEMP];
+      dietSourceSheet = useTemporaryDiet ? ABA_DIETA_TEMP : ABA_DIETA;
+
+      const sheet = workbook.Sheets[dietSourceSheet];
+      if (!sheet) {
+        throw new Error(`A aba "${dietSourceSheet}" não existe no arquivo Excel.`);
+      }
 
       const rows = XLSX.utils.sheet_to_json(sheet, {
         header: 1,
@@ -785,87 +844,153 @@
         raw: false
       });
 
-      if (!rows.length) throw new Error(`A aba "${ABA_DIETA}" está vazia.`);
+      if (!rows.length) {
+        throw new Error(`A aba "${dietSourceSheet}" está vazia.`);
+      }
 
-      const headers = rows[0].map(clean);
-      const dayCol = headers.findIndex(h => normalizeText(h) === "dia");
-      const timeCol = headers.findIndex(h => normalizeText(h) === "horario");
-      const mealCol = headers.findIndex(h => normalizeText(h) === "refeicao");
-      const foodCol = headers.findIndex(h => normalizeText(h) === "comida simples");
-      const quantityCol = headers.findIndex(h =>
-        ["quantidades", "quantidade", "itens e quantidades"].includes(normalizeText(h))
-      );
+      const table = findDietTable(rows);
 
-      if ([dayCol, timeCol, mealCol, foodCol].some(i => i < 0)) {
+      if (!table) {
         throw new Error(
-          'Não encontrei as colunas "Dia", "Horário", "Refeição" e "Comida simples" na aba Dieta.'
+          `Não encontrei a tabela do app na aba "${dietSourceSheet}". ` +
+          'Ela precisa conter: Dia | Horário | Refeição | Comida simples | Quantidades.'
         );
       }
 
       let currentDay = "";
 
-      dietTasks = rows.slice(1).map((row, index) => {
-        const explicitDay = clean(row[dayCol]);
+      dietTasks = rows.slice(table.headerRow + 1).map((row, index) => {
+        const explicitDay = clean(row[table.dayCol]);
         if (explicitDay) currentDay = explicitDay;
 
         return {
           kind: "dieta",
-          row: index + 2,
+          period: isBeforeOrOnCutoff() ? "ate-23-10" : "apos-23-10",
+          row: table.headerRow + index + 2,
           day: currentDay,
-          time: clean(row[timeCol]),
-          meal: clean(row[mealCol]),
-          food: clean(row[foodCol]),
-          quantities: quantityCol >= 0 ? parseQuantities(row[quantityCol]) : []
+          time: clean(row[table.timeCol]),
+          meal: clean(row[table.mealCol]),
+          food: clean(row[table.foodCol]),
+          quantities:
+            table.quantityCol >= 0
+              ? parseQuantities(row[table.quantityCol])
+              : []
         };
-      }).filter(t => t.day && (t.time || t.meal || t.food));
+      }).filter(t =>
+        t.day &&
+        (t.time || t.meal || t.food) &&
+        DAY_ORDER.includes(baseDay(t.day))
+      );
+
+      if (!dietTasks.length) {
+        throw new Error(`Nenhuma refeição foi encontrada na aba "${dietSourceSheet}".`);
+      }
     }
 
     function readRoutineSheet(workbook) {
       const sheet = workbook.Sheets[ABA_ROTINA];
       if (!sheet) throw new Error(`A aba "${ABA_ROTINA}" não existe no arquivo Excel.`);
 
-      // raw:true mantém horários do Excel como frações, permitindo conversão consistente.
+      // raw:true mantém horários do Excel como frações (ex.: 0,22916 = 05:30).
       const rows = XLSX.utils.sheet_to_json(sheet, {
         header: 1,
         defval: "",
         raw: true
       });
 
-      if (rows.length < 3) throw new Error(`A aba "${ABA_ROTINA}" não possui dados suficientes.`);
+      if (rows.length < 4) {
+        throw new Error(`A aba "${ABA_ROTINA}" não possui dados suficientes.`);
+      }
 
-      const locationRow = rows[0] || [];
-      const headerRow = rows[1] || [];
+      const periodRow = rows[0] || [];
+      const wantBefore = isBeforeOrOnCutoff();
+
+      const beforeCol = periodRow.findIndex(
+        value => normalizeText(value).includes("ate 23/10")
+      );
+      const afterCol = periodRow.findIndex(
+        value => normalizeText(value).includes("apos 23/10")
+      );
+
+      let startCol = wantBefore ? beforeCol : afterCol;
+
+      // Fallback para o layout atual da planilha:
+      // Até 23/10 começa em A; Após 23/10 começa em F.
+      if (startCol < 0) startCol = wantBefore ? 0 : 5;
+
+      routinePeriod = wantBefore ? "Até 23/10" : "Após 23/10";
       routineTasks = [];
 
-      for (let col = 1; col < headerRow.length; col++) {
-        const sourceDay = clean(headerRow[col]);
-        const normalizedDay = baseDay(sourceDay);
+      // Dentro de cada período existem dois blocos:
+      // 1) segunda a quarta
+      // 2) quinta e sexta
+      // Ambos têm "rotina" na coluna inicial do período.
+      const headerRows = [];
 
-        if (!DAY_ORDER.includes(normalizedDay)) continue;
-
-        const location = clean(locationRow[col]);
-
-        for (let rowIndex = 2; rowIndex < rows.length; rowIndex++) {
-          const row = rows[rowIndex] || [];
-          const title = clean(row[col]);
-
-          if (!title) continue;
-
-          routineTasks.push({
-            kind: "rotina",
-            row: rowIndex + 1,
-            col: col + 1,
-            day: normalizedDay,
-            sourceDay,
-            time: formatRoutineTime(row[0]),
-            title,
-            location
-          });
+      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        if (normalizeText((rows[rowIndex] || [])[startCol]) === "rotina") {
+          headerRows.push(rowIndex);
         }
       }
 
+      headerRows.forEach((headerRowIndex, headerIndex) => {
+        const headerRow = rows[headerRowIndex] || [];
+        const locationRow = rows[Math.max(0, headerRowIndex - 1)] || [];
+        const nextHeaderRow =
+          headerRows[headerIndex + 1] !== undefined
+            ? headerRows[headerIndex + 1]
+            : rows.length;
+
+        const dayColumns = [];
+
+        // Um bloco usa no máximo 3 dias após a coluna de horário.
+        for (let col = startCol + 1; col <= startCol + 3; col++) {
+          const sourceDay = clean(headerRow[col]);
+          const normalizedDay = baseDay(sourceDay);
+
+          if (DAY_ORDER.includes(normalizedDay)) {
+            dayColumns.push({
+              col,
+              day: normalizedDay,
+              sourceDay,
+              location: clean(locationRow[col])
+            });
+          }
+        }
+
+        // A linha imediatamente anterior ao próximo cabeçalho contém a localização
+        // do próximo bloco (ex.: "Trabalho presencial"), então não deve virar tarefa.
+        const blockEnd = headerIndex + 1 < headerRows.length
+          ? Math.max(headerRowIndex + 1, nextHeaderRow - 1)
+          : nextHeaderRow;
+
+        for (let rowIndex = headerRowIndex + 1; rowIndex < blockEnd; rowIndex++) {
+          const row = rows[rowIndex] || [];
+          const time = formatRoutineTime(row[startCol]);
+
+          dayColumns.forEach(dayInfo => {
+            const title = clean(row[dayInfo.col]);
+            if (!title) return;
+
+            routineTasks.push({
+              kind: "rotina",
+              period: wantBefore ? "ate-23-10" : "apos-23-10",
+              row: rowIndex + 1,
+              col: dayInfo.col + 1,
+              day: dayInfo.day,
+              sourceDay: dayInfo.sourceDay,
+              time,
+              title,
+              location: dayInfo.location
+            });
+          });
+        }
+      });
+
       if (!routineTasks.length) {
-        throw new Error('A aba "Rotina" foi encontrada, mas nenhuma tarefa foi identificada.');
+        throw new Error(
+          `A aba "Rotina" foi encontrada, mas nenhuma tarefa do período "${routinePeriod}" foi identificada.`
+        );
       }
     }
 
@@ -1141,15 +1266,18 @@
           : "Planejamento da semana";
 
       if (currentPage === "rotina") {
-        $("pageEyebrow").textContent = "Rotina";
+        $("pageEyebrow").textContent = `Rotina · ${routinePeriod || currentPeriodLabel()}`;
         $("sectionTitle").textContent = "Check-ins do dia";
         $("sourceLabel").innerHTML =
-          'Fonte: <code>Dieta.xlsx</code> → aba <code>Rotina</code>.';
+          `Fonte: <code>Dieta.xlsx</code> → aba <code>Rotina</code> → ` +
+          `<strong>${routinePeriod || currentPeriodLabel()}</strong>.`;
       } else {
-        $("pageEyebrow").textContent = "Dieta";
+        const dietPeriod = isBeforeOrOnCutoff() ? "Até 23/10" : "Após 23/10";
+        $("pageEyebrow").textContent = `Dieta · ${dietPeriod}`;
         $("sectionTitle").textContent = "Refeições e atividades";
         $("sourceLabel").innerHTML =
-          'Fonte: <code>Dieta.xlsx</code> → aba <code>Dieta</code>. Toque na refeição para ver as quantidades.';
+          `Fonte: <code>Dieta.xlsx</code> → aba <code>${dietSourceSheet}</code>. ` +
+          `Toque na refeição para ver as quantidades.`;
       }
 
       updatePageNavigation();
@@ -1230,7 +1358,10 @@
         box.innerHTML =
           `<strong>Erro ao ler a planilha.</strong><br><br>${String(error.message)}<br><br>` +
           `O arquivo precisa se chamar <code>Dieta.xlsx</code> e ficar na mesma pasta do ` +
-          `<code>index.html</code>. Abra o app pelo GitHub Pages/servidor web.`;
+          `<code>index.html</code>. O app procura a tabela da Dieta com as colunas ` +
+          `<code>Dia</code>, <code>Horário</code>, <code>Refeição</code>, ` +
+          `<code>Comida simples</code> e <code>Quantidades</code>, além dos blocos ` +
+          `<code>Até 23/10</code> e <code>Após 23/10</code> na aba Rotina.`;
 
         list.appendChild(box);
         $("progressText").textContent = "0 / 0";
